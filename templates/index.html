@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Events Voting</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- Global Styles --- */
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(to right, #6a11cb, #2575fc);
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #b09898ff;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+        }
+
+        /* --- Event List --- */
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background: #fff;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        li b {
+            font-size: 1.2em;
+            color: #2575fc;
+        }
+        .vote-form {
+            margin-top: 10px;
+        }
+        input[type="email"] {
+            padding: 8px;
+            width: 250px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 15px;
+            background: #6a11cb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background: #2575fc;
+        }
+
+        /* --- Add Event Form --- */
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        input[type="text"], input[type="date"], textarea {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            width: 100%;
+            font-size: 1em;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        /* --- Footer --- */
+        footer {
+            text-align: center;
+            color: #dda6a6ff;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upcoming Events</h1>
+        <ul>
+            {% for id, event in events.items() %}
+            <li>
+                <b>{{ event["title"] }}</b> ({{ event["date"] }})<br>
+                {{ event["description"] }}<br>
+                Votes: {{ event["votes"]|length }}
+                <form class="vote-form" action="/vote/{{ id }}" method="post">
+                    <input type="email" name="email" placeholder="Enter your email" required>
+                    <button type="submit">Vote</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <h2>Add New Event</h2>
+        <form action="/add_event" method="post">
+            <input type="text" name="title" placeholder="Event Title" required>
+            <textarea name="description" placeholder="Event Description"></textarea>
+            <input type="date" name="date" required>
+            <button type="submit">Add Event</button>
+        </form>
+    </div>
+
+    <footer>
+        &copy; 2025 Student Events Voting App
+    </footer>
+</body>
+</html>
