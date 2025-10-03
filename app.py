@@ -1,17 +1,28 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, jsonify
 import shelve
 
 app = Flask(__name__)
 DB_NAME = "events.db"
 
-def get_events():
+@app.route('/')
+def index():
     with shelve.open(DB_NAME) as db:
-        return dict(db)  # returns a dict of all events
+        events = dict(db)
+    return render_template('index.html', events=events)
 
-@app.route("/")
-def home():
-    events = get_events()
-    return render_template("index.html", events=events)
+@app.route("/events")
+def events():
+    with shelve.open(DB_NAME) as db:
+        events_list = []
+        for event_id, event in db.items():
+            events_list.append({
+                "id": event_id,
+                "title": event["title"],
+                "start": event["date"],
+                "description": event["description"],
+                "votes": len(event["votes"])
+            })
+    return jsonify(events_list)
 
 @app.route("/add_event", methods=["POST"])
 def add_event():
@@ -31,13 +42,11 @@ def vote(event_id):
 
     with shelve.open(DB_NAME, writeback=True) as db:
         event = db[event_id]
-        if email not in event["votes"]:  # prevent duplicate votes
+        if email not in event["votes"]:
             event["votes"].append(email)
         db[event_id] = event
 
     return redirect("/")
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))  # Use Render's port or 5000 locally
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(debug=True)
