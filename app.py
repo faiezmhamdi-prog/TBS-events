@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, redirect, jsonify
+from flask import Flask, render_template, request, redirect, jsonify, send_file
 import shelve
+import json
 
 app = Flask(__name__)
 DB_NAME = "events.db"
@@ -48,5 +49,15 @@ def vote(event_id):
 
     return redirect("/")
 
+# NEW EXPORT ROUTE
+@app.route("/export_events")
+def export_events():
+    with shelve.open(DB_NAME) as db:
+        events = dict(db)
+    with open("events_export.json", "w") as f:
+        json.dump(events, f, indent=4)
+    return send_file("events_export.json", as_attachment=True)
+
 if __name__ == "__main__":
     app.run(debug=True)
+
