@@ -1,63 +1,117 @@
-from flask import Flask, render_template, request, redirect, jsonify, send_file
-import shelve
-import json
+import os
+from flask import Flask, render_template, request, redirect, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 
 app = Flask(__name__)
-DB_NAME = "events.db"
 
-@app.route('/')
+# Use Render's DATABASE_URL (Postgres) if available, otherwise local sqlite for dev.
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///events.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
+
+# ----- Models -----
+class Event(db.Model):
+    __tablename__ = "events"
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    date = db.Column(db.String(50), nullable=True)  # keep as string for simplicity
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    votes = db.relationship("Vote", backref="event", cascade="all, delete-orphan", lazy="dynamic")
+
+class Vote(db.Model):
+    __tablename__ = "votes"
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    __table_args__ = (db.UniqueConstraint("event_id", "email", name="uix_event_email"),)
+
+# Create tables at startup (safe for small apps)
+with app.app_context():
+    db.create_all()
+
+# ----- Helpers -----
+def serialize_event(ev: Event):
+    return {
+        "id": ev.id,
+        "title": ev.title,
+        "description": ev.description,
+        "date": ev.date,
+        "votes": ev.votes.count()
+    }
+
+# ----- Routes -----
+@app.route("/")
 def index():
-    with shelve.open(DB_NAME) as db:
-        events = dict(db)
-    return render_template('index.html', events=events)
+    # The page will fetch /events via JS; we can still pass nothing and let front-end load JSON.
+    return render_template("index.html")
 
 @app.route("/events")
-def events():
-    with shelve.open(DB_NAME) as db:
-        events_list = []
-        for event_id, event in db.items():
-            events_list.append({
-                "id": event_id,
-                "title": event["title"],
-                "start": event["date"],
-                "description": event["description"],
-                "votes": len(event["votes"])
-            })
-    return jsonify(events_list)
+def get_events():
+    events = Event.query.order_by(Event.created_at.desc()).all()
+    return jsonify([serialize_event(e) for e in events])
 
 @app.route("/add_event", methods=["POST"])
 def add_event():
-    title = request.form["title"]
-    description = request.form["description"]
-    date = request.form["date"]
+    # Accept both form-encoded and JSON
+    data = request.get_json(silent=True)
+    if data:
+        title = data.get("title", "").strip()
+        description = data.get("description", "").strip()
+        date = data.get("date", "").strip()
+    else:
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        date = request.form.get("date", "").strip()
 
-    with shelve.open(DB_NAME, writeback=True) as db:
-        event_id = str(len(db) + 1)
-        db[event_id] = {"title": title, "description": description, "date": date, "votes": []}
+    if not title:
+        return jsonify({"error": "Title is required"}), 400
+
+    ev = Event(title=title, description=description, date=date)
+    db.session.add(ev)
+    db.session.commit()
+
+    # If the client expects JSON, return the new event
+    if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify(serialize_event(ev)), 201
 
     return redirect("/")
 
-@app.route("/vote/<event_id>", methods=["POST"])
+@app.route("/vote/<int:event_id>", methods=["POST"])
 def vote(event_id):
-    email = request.form["email"]
+    data = request.get_json(silent=True)
+    if data:
+        email = data.get("email", "").strip().lower()
+    else:
+        email = request.form.get("email", "").strip().lower()
 
-    with shelve.open(DB_NAME, writeback=True) as db:
-        event = db[event_id]
-        if email not in event["votes"]:
-            event["votes"].append(email)
-        db[event_id] = event
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
 
-    return redirect("/")
+    # ensure event exists
+    ev = Event.query.get_or_404(event_id)
 
-# NEW EXPORT ROUTE
-@app.route("/export_events")
-def export_events():
-    with shelve.open(DB_NAME) as db:
-        events = dict(db)
-    with open("events_export.json", "w") as f:
-        json.dump(events, f, indent=4)
-    return send_file("events_export.json", as_attachment=True)
+    # Try to insert vote; UniqueConstraint prevents duplicates
+    v = Vote(event_id=event_id, email=email)
+    db.session.add(v)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        # already voted
+        return jsonify({"status": "already_voted", "votes": ev.votes.count()}), 200
+
+    return jsonify({"status": "ok", "votes": ev.votes.count()}), 201
+
+# Simple health endpoint
+@app.route("/ping")
+def ping():
+    return "pong", 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
-
+    # For local dev
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
