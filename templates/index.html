@@ -14,64 +14,99 @@
             margin: 0;
             padding: 0;
         }
-        h1, h2 { text-align: center; color: #6a11cb; }
+        h1, h2 {
+            text-align: center;
+            color: #6a11cb;
+        }
         .main-content {
-            display: flex; justify-content: center; align-items: flex-start;
-            gap: 40px; padding: 40px; flex-wrap: wrap;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px;
+            padding: 40px;
+            flex-wrap: wrap;
         }
         .container, .calendar-container {
-            background: #a4d1ff; padding: 30px; border-radius: 12px;
+            background: #a4d1ff;
+            padding: 30px;
+            border-radius: 12px;
             box-shadow: 0 6px 18px rgba(0,0,0,0.2);
         }
         .container { max-width: 500px; flex: 1; }
         .calendar-container { max-width: 600px; flex: 1; }
+
         ul { list-style: none; padding: 0; }
         li {
-            background: #a4d1ff; margin: 15px 0; padding: 20px;
-            border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: #a4d1ff;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         li b { font-size: 1.2em; color: #240589; }
         .vote-form { margin-top: 10px; }
+
         input[type="email"], input[type="text"], input[type="date"], textarea {
-            padding: 8px; border: 1px solid #ccc; border-radius: 6px;
-            margin-right: 10px; font-size: 1em;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-right: 10px;
+            font-size: 1em;
         }
         input[type="email"] { width: 250px; }
         button {
-            padding: 8px 15px; background: #6a11cb; color: #fff;
-            border: none; border-radius: 6px; cursor: pointer; transition: 0.3s;
+            padding: 8px 15px;
+            background: #6a11cb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
         }
         button:hover { background: #2575fc; }
         form { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
         textarea { resize: vertical; min-height: 60px; }
+
+        /* FullCalendar integration */
         #calendar {
-            background: #fff; border-radius: 8px; padding: 10px;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
         }
         .fc-toolbar-title { color: #240589; }
         .fc-daygrid-event {
             background-color: #6a11cb !important;
-            border: none !important; color: white !important;
-            border-radius: 4px; padding: 2px 5px; font-size: 0.9em;
+            border: none !important;
+            color: white !important;
+            border-radius: 4px;
+            padding: 2px 5px;
+            font-size: 0.9em;
         }
         .fc-button {
-            background: #6a11cb !important; border: none !important;
-            border-radius: 6px !important; color: white !important;
+            background: #6a11cb !important;
+            border: none !important;
+            border-radius: 6px !important;
+            color: white !important;
         }
         .fc-button:hover { background: #2575fc !important; }
-        footer { text-align: center; color: #dda6a6ff; margin-top: 50px; }
+
+        footer {
+            text-align: center;
+            color: #dda6a6ff;
+            margin-top: 50px;
+        }
     </style>
 </head>
 <body>
     <div class="main-content">
         <div class="container">
             <h1>Add New Event</h1>
-            <form id="addForm">
+            <form action="/add_event" method="post">
                 <input type="text" name="title" placeholder="Event Title" required>
                 <textarea name="description" placeholder="Event Description"></textarea>
                 <input type="date" name="date" required>
                 <button type="submit">Add Event</button>
             </form>
-            <div id="addMsg" style="color:green;margin-top:8px"></div>
         </div>
 
         <div class="calendar-container">
@@ -81,7 +116,21 @@
     </div>
 
     <h1>Upcoming Events</h1>
-    <ul id="eventList"></ul>
+    <ul>
+        {% if events and events|length > 0 %}
+            {% for id, event in events.items() %}
+            <li>
+                <b>{{ event["title"] }}</b> ({{ event["date"] }})<br>
+                {{ event["description"] }}<br>
+                Votes: {{ event["votes"]|length }}
+                <form class="vote-form" action="/vote/{{ id }}" method="post">
+                    <input type="email" name="email" placeholder="Enter your email" required>
+                    <button type="submit">Vote</button>
+                </form>
+            </li>
+            {% endfor %}
+        {% endif %}
+    </ul>
 
     <footer>
         &copy; 2025 Student Events Voting App
@@ -89,10 +138,10 @@
 
     <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const calendarEl = document.getElementById("calendar");
-        const calendar = new FullCalendar.Calendar(calendarEl, {
+        var calendarEl = document.getElementById("calendar");
+        var calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: "dayGridMonth",
-            events: "/events",
+            events: "/events",  // Flask route returning JSON
             eventClick: function(info) {
                 alert(
                     "Title: " + info.event.title +
@@ -103,77 +152,6 @@
             }
         });
         calendar.render();
-
-        const eventList = document.getElementById("eventList");
-
-        async function loadEvents() {
-            const res = await fetch("/events");
-            const events = await res.json();
-            renderEventList(events);
-            calendar.refetchEvents();
-        }
-
-        function renderEventList(events) {
-            eventList.innerHTML = "";
-            if (events.length === 0) {
-                eventList.innerHTML = "<p style='text-align:center;'>No events yet.</p>";
-                return;
-            }
-
-            events.forEach(ev => {
-                const li = document.createElement("li");
-                li.innerHTML = `
-                    <b>${ev.title}</b> (${ev.date})<br>
-                    ${ev.description}<br>
-                    Votes: <span id="votes-${ev.id}">${ev.votes}</span>
-                    <form class="vote-form" data-id="${ev.id}">
-                        <input type="email" name="email" placeholder="Enter your email" required>
-                        <button type="submit">Vote</button>
-                    </form>
-                `;
-                eventList.appendChild(li);
-            });
-
-            document.querySelectorAll(".vote-form").forEach(form => {
-                form.addEventListener("submit", async (e) => {
-                    e.preventDefault();
-                    const eventId = form.getAttribute("data-id");
-                    const email = form.email.value.trim();
-                    const res = await fetch(`/vote/${eventId}`, {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({email})
-                    });
-                    const data = await res.json();
-                    document.getElementById(`votes-${eventId}`).innerText = data.votes;
-                    form.reset();
-                });
-            });
-        }
-
-        document.getElementById("addForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const payload = {
-                title: form.title.value,
-                description: form.description.value,
-                date: form.date.value
-            };
-            const res = await fetch("/add_event", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                form.reset();
-                document.getElementById("addMsg").textContent = "Event added ✓";
-                setTimeout(() => document.getElementById("addMsg").textContent = "", 2000);
-                loadEvents();
-            }
-        });
-
-        loadEvents();
-        setInterval(loadEvents, 5000); // refresh every 5 seconds
     });
     </script>
 </body>
